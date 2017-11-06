@@ -8,11 +8,45 @@ output: html_notebook
 source("R/getdata.R")
 library(tidyverse)
 library(statnet)
+library(abind)
 ```
 
 ```{r}
 adjmats <- import_data() %>% process_data
 networks <- map(adjmats, as.matrix) %>% map(~ as.network(., directed=FALSE))
+map(adjmats, as.matrix) %>% abind(along=3) -> allAs
+allAs <- allAs > 0
 ```
 
+Now that we've got all the (undirected) networks in a nice form, let's start fitting them.
+
+```{r}
+library(reticulate)
+use_condaenv("factorial")
+lsm <- import("lsm")
+lsm.utils <- import("lsm.utils")
+```
+
+```{r}
+arrDims <- dim(allAs)
+N <- arrDims[1]
+Vorig <- arrDims[2]
+V <- Vorig
+meanMat <- Matrix(rowMeans(allAs, dims=2))
+image(meanMat)
+```
+
+```{r}
+bernoulli <- lsm$LatentSpaceModel(V, 0L, name="bernoulli")
+```
+
+```{r}
+bernoulli$add_data(allAs[,,1],mask=(diag(70) > 0))
+bernoulli$initialize()
+bernoulli$resample()
+bernoulli$log_prior()
+bernoulli$log_likelihood()
+bernoulli$heldout_log_likelihood()
+bernoulli$ms
+```
 
