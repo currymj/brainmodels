@@ -1,0 +1,18 @@
+---
+title: "R Notebook"
+output: html_notebook
+  self_contained: no
+---
+
+```{r}
+source("R/getdata.R")
+library(tidyverse)
+library(statnet)
+```
+
+```{r}
+adjmats <- import_data() %>% process_data
+networks <- map(adjmats, as.matrix) %>% map(~ as.network(., directed=FALSE))
+```
+
+
