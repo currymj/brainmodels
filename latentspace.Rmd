@@ -14,7 +14,7 @@ library(abind)
 ```{r}
 adjmats <- import_data() %>% process_data
 networks <- map(adjmats, as.matrix) %>% map(~ as.network(., directed=FALSE))
-map(adjmats, as.matrix) %>% abind(along=3) -> allAs
+map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
 allAs <- allAs > 0
 ```
 
@@ -25,13 +25,31 @@ library(reticulate)
 use_condaenv("factorial")
 lsm <- import("lsm")
 lsm.utils <- import("lsm.utils")
+np <- import("numpy")
+```
+
+Some training parameters:
+```{r}
+missing_frac <- 0.25
+n_itr <- 500
 ```
 
 ```{r}
 arrDims <- dim(allAs)
 N <- arrDims[1]
 Vorig <- arrDims[2]
-V <- Vorig
+bad_indices <- c(1,36)
+good_indices <- (1:Vorig)[!((1:Vorig) %in% bad_indices)]
+allAs <- allAs[, good_indices, good_indices]
+V <- Vorig - length(bad_indices)
+```
+
+Create random masks:
+```{r}
+masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
+```
+
+```{r}
 meanMat <- Matrix(rowMeans(allAs, dims=2))
 image(meanMat)
 ```
@@ -41,12 +59,29 @@ bernoulli <- lsm$LatentSpaceModel(V, 0L, name="bernoulli")
 ```
 
 ```{r}
-bernoulli$add_data(allAs[,,1],mask=(diag(70) > 0))
+for (i in 1:N) {
+  bernoulli$add_data(allAs[1,,], mask=masks[,,1])
+}
 bernoulli$initialize()
-bernoulli$resample()
-bernoulli$log_prior()
-bernoulli$log_likelihood()
-bernoulli$heldout_log_likelihood()
-bernoulli$ms
+make_sampler <- function(model) {
+    function(sample_num) {
+      model$resample()
+      data.frame(
+        iteration=sample_num,
+        log_prior=model$log_prior(),
+        log_likelihood=model$log_likelihood(),
+        hll=model$heldout_log_likelihood()
+      )
+  }
+}
+
+```
+
+```{r}
+bernoulli_sampler <- make_sampler(bernoulli)
+n_iters <- 10
+bernoulli_results <- as_tibble(map_df(1:n_iters, bernoulli_sampler))
+#bernoulli_results <- pblapply(1:n_iters, bernoulli_sampler) %>% map_df(~ .) %>% as_tibble
+
 ```
 
