@@ -32,6 +32,8 @@ Some training parameters:
 ```{r}
 missing_frac <- 0.25
 n_itr <- 500
+Ks <- seq(2L,21,2)
+sigmasq_b <- 1.0
 ```
 
 ```{r}
@@ -55,14 +57,15 @@ image(meanMat)
 ```
 
 ```{r}
-bernoulli <- lsm$LatentSpaceModel(V, 0L, name="bernoulli")
 ```
-
+Here's a function to close over a model and return a function that returns rows of a data frame.
 ```{r}
-for (i in 1:N) {
-  bernoulli$add_data(allAs[1,,], mask=masks[,,1])
+model_prep <- function(model) {
+  for (i in 1:N) {
+     model$add_data(allAs[1,,], mask=masks[,,1])
+  }
 }
-bernoulli$initialize()
+
 make_sampler <- function(model) {
     function(sample_num) {
       model$resample()
@@ -78,10 +81,39 @@ make_sampler <- function(model) {
 ```
 
 ```{r}
-bernoulli_sampler <- make_sampler(bernoulli)
-n_iters <- 10
-bernoulli_results <- as_tibble(map_df(1:n_iters, bernoulli_sampler))
-#bernoulli_results <- pblapply(1:n_iters, bernoulli_sampler) %>% map_df(~ .) %>% as_tibble
+bernoulli <- lsm$LatentSpaceModel(V, 0L, name="bernoulli")
+model_prep(bernoulli)
+bernoulli$initialize()
+```
 
+```{r}
+bernoulli_sampler <- make_sampler(bernoulli)
+n_iters <- 500
+#bernoulli_results <- as_tibble(map_df(1:n_iters, bernoulli_sampler))
+bernoulli_results <- pblapply(1:n_iters, bernoulli_sampler) %>% map_df(~ .) %>% as_tibble
+```
+```{r}
+fit_model <- function(model, n_iters = 500, progress_bar = TRUE) {
+  sampler <- make_sampler(model)
+  if (progress_bar) {
+    return(pblapply(1:n_iters, sampler) %>% map_df(~ .) %>% as_tibble)
+  } else {
+    return(as_tibble(map_df(1:n_iters, sampler)))
+  }
+}
+```
+
+Some Bernoulli plots:
+
+```{r}
+ggplot(bernoulli_results, aes(iteration, log_likelihood)) + geom_line()
+ggplot(bernoulli_results, aes(iteration, hll)) + geom_line()
+ggplot(bernoulli_results, aes(iteration, log_prior)) + geom_line()
+```
+
+Now to fit the "standard" latent space models:
+
+```{r}
+standard_models <- map(Ks, ~ lsm$LatentSpaceModel(V, ., sigmasq_b=sigmasq_b))
 ```
 
