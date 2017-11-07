@@ -1,5 +1,6 @@
 ---
 title: "Graph Modeling Presentation"
+author: "Michael Jeremiah Curry"
 output: 
   beamer_presentation: 
     latex_engine: xelatex
@@ -15,8 +16,11 @@ output:
 
 ## Papers
 
-- Dunson
-- Blei
+- "Nonparametric Bayes Modeling of Populations of Networks"
+  - by Daniele Durante, David B. Dunson, Joshua T. Vogelstein
+- A discussion of "Nonparametric Bayes Modeling of Populations of Networks" by Durante, Dunson, and Vogelstein (2016)
+  - by Scott W. Linderman and David Blei
+  - https://github.com/blei-lab/factorial-network-models
 
 ## The model(s)
 
@@ -28,6 +32,7 @@ output:
 - Can think of the latent space as "features"
 - Nearness in latent space determines edge probability
 - There may be global feature weights
+- In this specific case, features are low-rank factorization of the adjacency matrix
 
 ### Mixture models
 
@@ -97,26 +102,22 @@ $$
 - If you want to see how they derived it, it's in the paper
 - While the original implementation is not available, Blei and Linderman have theirs on Github.
 
-```{r}
-getwd()
-```
-```{r}
+```{r,echo=FALSE,message=FALSE,warning=FALSE}
 source("R/latentspace_sample.R")
 ```
 
-## Their data
+## Brain data: convergence
 
-```{r}
+```{r,echo=FALSE}
 adjmats <- import_data() %>% process_data
-networks <- map(adjmats, as.matrix) %>% map(~ as.network(., directed=FALSE))
 map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
 allAs <- allAs > 0
 ```
 
-```{r}
+```{r,echo=FALSE}
 missing_frac <- 0.25
-n_itr <- 500
-Ks <- seq(2L,21L,2L)
+n_itr <- 100
+Ks <- seq(2L,21L,4L)
 sigmasq_b <- 1.0
 H <- 10L
 arrDims <- dim(allAs)
@@ -126,17 +127,99 @@ bad_indices <- c(1,36)
 good_indices <- (1:Vorig)[!((1:Vorig) %in% bad_indices)]
 allAs <- allAs[, good_indices, good_indices]
 V <- Vorig - length(bad_indices)
+masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
 ```
 
-```{r, cache=TRUE,warning=FALSE}
-mixture_models_sh <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, name=paste0("mixture_shrinkage", .)))
+```{r, cache=TRUE,warning=FALSE,echo=FALSE}
+mixture_models_sh <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name=paste0("mixture_shrinkage", .)))
 
 mixture_models_sh %>% walk(~ model_prep(., allAs, masks)) %>% walk(~ .$initialize)
-mixture_model_sh_results <- pblapply(mixture_models_sh, function(x) {fit_model(x, n_iter=30, progress_bar=FALSE)})
+mixture_model_sh_results <- pblapply(mixture_models_sh, function(x) {fit_model(x, n_iter=n_itr, progress_bar=FALSE)})
 mixture_model_sh_df <- map(mixture_model_sh_results, ~ .$df) %>% bind_rows
 ```
 
-```{r}
+```{r,echo=FALSE}
 mixture_model_sh_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + geom_line()
 ```
-## Sample HCP data
+
+## Brain data: assignments
+
+```{r,echo=FALSE}
+assignments_table <- as_tibble(simplify2array(map(mixture_model_sh_results[[4]]$model, ~ .$hs)))
+assignments_table <- assignments_table %>% setNames(map(1:n_itr, paste0))
+assignments_table$graph <- 1:N
+assignments_df <- gather(assignments_table, iter, cluster, -graph)
+assignments_df$cluster <- as.factor(assignments_df$cluster)
+assignments_df$iter <- map_int(assignments_df$iter,strtoi)
+ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
+```
+
+## Brain data: assignments
+
+- Fit with different numbers of components
+- All about the same, all ended up converging on assigning all graphs to a single component
+- This is good, these graphs are very similar to each other so the model is behaving appropriately.
+
+## Random graphs: convergence
+
+```{r, echo=FALSE}
+adjmats <- import_data() %>% process_data
+map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
+allAs <- allAs > 0
+for (i in 1:10) {
+  allAs <- abind(allAs, round(matrix(runif(70*70), 70, 70)), along=1)
+}
+missing_frac <- 0.25
+n_itr <- 100
+Ks <- seq(2L,21L,4L)
+sigmasq_b <- 1.0
+H <- 10L
+arrDims <- dim(allAs)
+N <- arrDims[1]
+Vorig <- arrDims[2]
+bad_indices <- c(1,36)
+good_indices <- (1:Vorig)[!((1:Vorig) %in% bad_indices)]
+allAs <- allAs[, good_indices, good_indices]
+V <- Vorig - length(bad_indices)
+allAs <- allAs > 0
+masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
+```
+
+```{r, cache=TRUE,warning=FALSE,echo=FALSE}
+mixture_models_rand <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name=paste0("mixture_rand", .)))
+
+mixture_models_rand %>% walk(~ model_prep(., allAs, masks)) %>% walk(~ .$initialize)
+mixture_model_rand_results <- pblapply(mixture_models_rand, function(x) {fit_model(x, n_iter=n_itr, progress_bar=FALSE)})
+mixture_model_rand_df <- map(mixture_model_rand_results, ~ .$df) %>% bind_rows
+```
+
+
+```{r,echo=FALSE}
+mixture_model_rand_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + geom_line()
+```
+
+## Random graphs: assignments
+
+- The graphs are correctly split into two clusters.
+
+```{r,echo=FALSE}
+assignments_table <- as_tibble(simplify2array(map(mixture_model_rand_results[[4]]$model, ~ .$hs)))
+assignments_table <- assignments_table %>% setNames(map(1:n_itr, paste0))
+assignments_table$graph <- 1:N
+assignments_df <- gather(assignments_table, iter, cluster, -graph)
+assignments_df$cluster <- as.factor(assignments_df$cluster)
+assignments_df$iter <- map_int(assignments_df$iter,strtoi)
+ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
+```
+
+
+## Conclusions
+
+- This model seems to work pretty well, at least in these simple cases
+- The goal is ultimately to distinguish populations
+  - Given unlabelled data, maybe we can find structure (cluster assignments)
+  - Fitting on a population we can compute likelihood of another and hypothesis test
+  - Simulate many draws and compare specific derived quantities.
+- Questions
+  - Can it identify more subtle latent structures?
+  - Can we condition on non-network observed variables (i.e. characteristics of individuals)?

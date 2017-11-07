@@ -166,7 +166,7 @@ mixture_model_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + geo
 We could look at the edge probabilities here but it looks like there's heavy overfitting?
 
 ```{r}
-mixture_models_sh <- map(Ks[1:3], ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, name=paste0("mixture", .)))
+mixture_models_sh <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), sigmasq_b=sigmasq_b, name=paste0("mixture_shrinkage", .)))
 mixture_models_sh %>% walk(model_prep) %>% walk(~ .$initialize)
 mixture_model_sh_results <- pblapply(mixture_models_sh, function(x) {fit_model(x, n_iter=30, progress_bar=FALSE)})
 ```

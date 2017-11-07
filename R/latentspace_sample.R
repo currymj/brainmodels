@@ -8,11 +8,12 @@ library(reticulate)
 source("R/getdata.R")
 
 use_condaenv("factorial")
-lsm <- import("lsm")
-lsm.utils <- import("lsm.utils")
-np <- import("numpy")
+lsm <- reticulate::import("lsm")
+lsm.utils <- reticulate::import("lsm.utils")
+np <- reticulate::import("numpy")
 
 model_prep <- function(model, allAs, masks) {
+  N <- dim(allAs)[1]
   for (i in 1:N) {
     model$add_data(allAs[i,,], mask=masks[,,i])
   }
@@ -60,7 +61,7 @@ fit_model <- function(model, n_iters = 50, progress_bar = TRUE) {
   )
 }
 
-edgeprob_matrix <- function(model_output) {
+edgeprob_matrix <- function(model_output, h) {
   last_model <- tail(model_output$model, n=1)[[1]]
-
+  Matrix(last_model$edgeprobs[[h]])
 }
