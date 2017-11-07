@@ -1,0 +1,117 @@
+---
+title: "Graph Modeling Presentation"
+output: beamer_presentation
+---
+
+# Introduction
+
+## Network-valued random-variables
+
+- Want a probability distribution over the space of networks
+- In practice this means a probability distribution over a space of matrices
+- Or for simple undirected graphs, just a space of binary vectors
+
+## Papers
+
+- Dunson
+- Blei
+
+## The model(s)
+
+- Combines two ideas
+
+### Latent space models
+
+- Each vertex is assumed to come from some latent space
+
+### Mixture models
+
+- The whole distribution is a mixture of many such models; first pick a model then draw a graph
+
+# Statement of Model
+
+## Model likelihood
+
+
+
+\begin{align*}
+&p \left(A_n |
+    Z, \{\{x_v^{(h)}\}_{v=1}^V,
+  \lambda^{(h)}\}_{h=1}^H, h_n \right) 
+  =\\ &\prod_{u=1}^V \prod_{v=1}^{u-1}
+  \text{Bern} \left(A_{n,[u,v]} |
+    \sigma(z_{u,v} + x_{u}^{(h_n)^\intercal} \Lambda^{(h_n)} x_v^{(h_n)}) \right).
+\end{align*}
+
+## Left-hand side:
+$$
+p \left(A_n |
+    Z, \{\{x_v^{(h)}\}_{v=1}^V,
+  \lambda^{(h)}\}_{h=1}^H, h_n \right) 
+$$
+
+- $A_n$: the $n$th network
+- $x_v^{(h)}$: the latent space parameters of vertex $v$ in mixture component $h$.
+- $\lambda_^{(h)}$: a scaling factor for mixture component $h$
+- $Z$: a bias applied for each edge
+- $h_n$: the mixture component we suppose $A_n$ came from
+
+## Right-hand side:
+
+$$
+\prod_{u=1}^V \prod_{v=1}^{u-1}
+  \text{Bern} \left(A_{n,[u,v]} |
+    \sigma(z_{u,v} + x_{u}^{(h_n)^\intercal} \Lambda^{(h_n)} x_v^{(h_n)}) \right).
+$$
+    
+- $A_n$: the $n$th network
+- $h_n$: the mixture component we suppose $A_n$ comes from
+- $x_u, x_v$: latent space vectors (per component $h_n$)
+- $z_{u,v}$: bias term for connection between vertices $u$ and $v$
+- $\Lambda^{h(n)}$: just $\text{diag}(\lambda^{(h_n)})$ (same scaling factors as matrix)
+- $\sigma$: just the logistic function (squashes between 0 and 1)
+
+## Prior distribution -- mixtures
+
+- A "multiplicative inverse gamma", parameters are $a_1$ and $a_2$
+- Basically just encourages sparsity (the vector $\lambda^{(h)}$ will have fewer components)
+- They do it in this complicated way because it guarantees full support, apparently
+$$
+\lambda_r^{(h)} = \prod_{m=1}^r \frac{1}{\nu_m^{(h)}}, \text{ where } \nu_1^{h} \thicksim \Gamma(a_1, 1),\: \nu_{\ge 2}^{(h)} \thicksim \Gamma(a_2, 1)
+$$
+
+## Prior distribution -- parameters
+
+- Edge biases are Gaussian: $Z \thicksim \mathbf{N}_{V(V-1)/2}(\mu, \Sigma)$
+- So are latent parameters: $X_{vr}^{h} \thicksim \mathbf{N}(0, 1)$
+
+# Fitting
+
+## Gibbs sampler
+
+- Monte Carlo method
+- If you want to see how they derived it, it's in the paper
+
+## Fit several models
+
+- Bernoulli
+- Single latent space model
+- Mixture of latent space models
+- Mixture of latent space models with shrinkage prior
+
+## Bernoulli
+
+ss
+
+## Single latent space model
+
+ss
+
+## Mixture of latent space models
+
+ss
+
+## Mixture of latent space models with shrinkage prior
+
+ss
+
