@@ -9,6 +9,7 @@ source("R/getdata.R")
 library(tidyverse)
 library(statnet)
 library(abind)
+library(pbapply)
 ```
 
 ```{r}
@@ -32,8 +33,9 @@ Some training parameters:
 ```{r}
 missing_frac <- 0.25
 n_itr <- 500
-Ks <- seq(2L,21,2)
+Ks <- seq(2L,21L,2L)
 sigmasq_b <- 1.0
+H <- 10L
 ```
 
 ```{r}
@@ -51,13 +53,6 @@ Create random masks:
 masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
 ```
 
-```{r}
-meanMat <- Matrix(rowMeans(allAs, dims=2))
-image(meanMat)
-```
-
-```{r}
-```
 Here's a function to close over a model and return a function that returns rows of a data frame.
 ```{r}
 model_prep <- function(model) {
@@ -69,13 +64,27 @@ model_prep <- function(model) {
 make_sampler <- function(model) {
     function(sample_num) {
       model$resample()
-      data.frame(
+      
+      if(hasName(model, "hs")) {
+        model_list <- list(
+          hs=model$hs,
+          edgeprobs0=model$edge_probabilities(0L),
+          edgeprobs1=model$edge_probabilities(1L)
+        )} else {
+        model_list <- list(
+          edgeprobs0=model$edge_probabilities(0L),
+          edgeprobs1=model$edge_probabilities(1L)
+        )
+      }
+      list(
+        model=model_list,
+      df=data.frame(
         name=model$name,
         iteration=sample_num,
         log_prior=model$log_prior(),
         log_likelihood=model$log_likelihood(),
         hll=model$heldout_log_likelihood()
-      )
+      ))
   }
 }
 
@@ -89,18 +98,26 @@ bernoulli$initialize()
 
 ```{r}
 bernoulli_sampler <- make_sampler(bernoulli)
-n_iters <- 500
+n_iters <- 10
 #bernoulli_results <- as_tibble(map_df(1:n_iters, bernoulli_sampler))
-bernoulli_results <- pblapply(1:n_iters, bernoulli_sampler) %>% map_df(~ .) %>% as_tibble
+bernoulli_results <- pblapply(1:n_iters, bernoulli_sampler) %>% map_df(~ .$df) %>% as_tibble
 ```
 ```{r}
 fit_model <- function(model, n_iters = 500, progress_bar = TRUE) {
   sampler <- make_sampler(model)
   if (progress_bar) {
-    return(pblapply(1:n_iters, sampler) %>% map_df(~ .) %>% as_tibble)
+    result <- pblapply(1:n_iters, sampler)
   } else {
-    return(as_tibble(map_df(1:n_iters, sampler)))
+    result <- map(1:n_iters, sampler)
   }
+  
+  result_models <- map(result, ~ .$model)
+  result_df <- map(result, ~ .$df) %>% bind_rows
+  
+  list(
+    model=result_models,
+    df=result_df
+  )
 }
 ```
 
@@ -117,6 +134,32 @@ Now to fit the "standard" latent space models:
 ```{r}
 standard_models <- map(Ks, ~ lsm$LatentSpaceModel(V, ., sigmasq_b=sigmasq_b, name=paste0("standard", .)))
 standard_models %>% walk(model_prep) %>% walk(~ .$initialize)
-standard_model_results <- map_df(standard_models, ~ fit_model(.))
+standard_model_results <- pblapply(standard_models, function(x) {fit_model(x, n_iter=100, progress_bar=FALSE)}, cl=4)
 ```
 
+
+```{r}
+standard_model_df <- bind_rows(standard_model_results)
+
+```
+
+Some plots of the standard model:
+```{r}
+standard_model_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + geom_line()
+```
+
+Now let's do mixture models (likely slow):
+
+```{r}
+mixture_models <- map(Ks, ~ lsm$MixtureOfLatentSpaceModels(V, .*H, H=H, sigmasq_b=sigmasq_b, name=paste0("mixture", .)))
+mixture_models %>% walk(model_prep) %>% walk(~ .$initialize)
+mixture_model_results <- pblapply(mixture_models, function(x) {fit_model(x, n_iter=3, progress_bar=FALSE)})
+```
+
+```{r}
+mixture_model_df <- map(mixture_model_results, ~ .$df) %>% bind_rows
+```
+
+```{r}
+mixture_model_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + geom_line()
+```
