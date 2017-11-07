@@ -1,6 +1,8 @@
 ---
 title: "Graph Modeling Presentation"
-output: beamer_presentation
+output: 
+  beamer_presentation: 
+    latex_engine: xelatex
 ---
 
 # Introduction
@@ -23,36 +25,38 @@ output: beamer_presentation
 ### Latent space models
 
 - Each vertex is assumed to come from some latent space
+- Can think of the latent space as "features"
+- Nearness in latent space determines edge probability
+- There may be global feature weights
 
 ### Mixture models
 
 - The whole distribution is a mixture of many such models; first pick a model then draw a graph
+- "Which mixture" is a latent variable; we're likely interested in the posterior distribution of this given an observed graph.
 
 # Statement of Model
 
 ## Model likelihood
 
-
-
 \begin{align*}
-&p \left(A_n |
+ &p \left(A_n |
     Z, \{\{x_v^{(h)}\}_{v=1}^V,
   \lambda^{(h)}\}_{h=1}^H, h_n \right) 
   =\\ &\prod_{u=1}^V \prod_{v=1}^{u-1}
   \text{Bern} \left(A_{n,[u,v]} |
-    \sigma(z_{u,v} + x_{u}^{(h_n)^\intercal} \Lambda^{(h_n)} x_v^{(h_n)}) \right).
+    \sigma(z_{u,v} + x_{u}^{(h_n)^\intercal} \Lambda^{(h_n)} x_v^{(h_n)}) \right)
 \end{align*}
 
 ## Left-hand side:
+
 $$
-p \left(A_n |
-    Z, \{\{x_v^{(h)}\}_{v=1}^V,
-  \lambda^{(h)}\}_{h=1}^H, h_n \right) 
+p \left(A_n | Z, \{\{x_v^{(h)}\}_{v=1}^V, \lambda^{(h)}\}_{h=1}^H, h_n \right) 
 $$
 
 - $A_n$: the $n$th network
+
 - $x_v^{(h)}$: the latent space parameters of vertex $v$ in mixture component $h$.
-- $\lambda_^{(h)}$: a scaling factor for mixture component $h$
+- $\lambda^{(h)}$: a scaling factor for mixture component $h$
 - $Z$: a bias applied for each edge
 - $h_n$: the mixture component we suppose $A_n$ came from
 
@@ -80,7 +84,7 @@ $$
 \lambda_r^{(h)} = \prod_{m=1}^r \frac{1}{\nu_m^{(h)}}, \text{ where } \nu_1^{h} \thicksim \Gamma(a_1, 1),\: \nu_{\ge 2}^{(h)} \thicksim \Gamma(a_2, 1)
 $$
 
-## Prior distribution -- parameters
+## Prior distribution parameters
 
 - Edge biases are Gaussian: $Z \thicksim \mathbf{N}_{V(V-1)/2}(\mu, \Sigma)$
 - So are latent parameters: $X_{vr}^{h} \thicksim \mathbf{N}(0, 1)$
@@ -91,27 +95,48 @@ $$
 
 - Monte Carlo method
 - If you want to see how they derived it, it's in the paper
+- While the original implementation is not available, Blei and Linderman have theirs on Github.
 
-## Fit several models
+```{r}
+getwd()
+```
+```{r}
+source("R/latentspace_sample.R")
+```
 
-- Bernoulli
-- Single latent space model
-- Mixture of latent space models
-- Mixture of latent space models with shrinkage prior
+## Their data
 
-## Bernoulli
+```{r}
+adjmats <- import_data() %>% process_data
+networks <- map(adjmats, as.matrix) %>% map(~ as.network(., directed=FALSE))
+map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
+allAs <- allAs > 0
+```
 
-ss
+```{r}
+missing_frac <- 0.25
+n_itr <- 500
+Ks <- seq(2L,21L,2L)
+sigmasq_b <- 1.0
+H <- 10L
+arrDims <- dim(allAs)
+N <- arrDims[1]
+Vorig <- arrDims[2]
+bad_indices <- c(1,36)
+good_indices <- (1:Vorig)[!((1:Vorig) %in% bad_indices)]
+allAs <- allAs[, good_indices, good_indices]
+V <- Vorig - length(bad_indices)
+```
 
-## Single latent space model
+```{r, cache=TRUE,warning=FALSE}
+mixture_models_sh <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, name=paste0("mixture_shrinkage", .)))
 
-ss
+mixture_models_sh %>% walk(~ model_prep(., allAs, masks)) %>% walk(~ .$initialize)
+mixture_model_sh_results <- pblapply(mixture_models_sh, function(x) {fit_model(x, n_iter=30, progress_bar=FALSE)})
+mixture_model_sh_df <- map(mixture_model_sh_results, ~ .$df) %>% bind_rows
+```
 
-## Mixture of latent space models
-
-ss
-
-## Mixture of latent space models with shrinkage prior
-
-ss
-
+```{r}
+mixture_model_sh_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + geom_line()
+```
+## Sample HCP data
