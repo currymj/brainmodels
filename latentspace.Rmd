@@ -70,6 +70,7 @@ make_sampler <- function(model) {
     function(sample_num) {
       model$resample()
       data.frame(
+        name=model$name,
         iteration=sample_num,
         log_prior=model$log_prior(),
         log_likelihood=model$log_likelihood(),
@@ -114,6 +115,8 @@ ggplot(bernoulli_results, aes(iteration, log_prior)) + geom_line()
 Now to fit the "standard" latent space models:
 
 ```{r}
-standard_models <- map(Ks, ~ lsm$LatentSpaceModel(V, ., sigmasq_b=sigmasq_b))
+standard_models <- map(Ks, ~ lsm$LatentSpaceModel(V, ., sigmasq_b=sigmasq_b, name=paste0("standard", .)))
+standard_models %>% walk(model_prep) %>% walk(~ .$initialize)
+standard_model_results <- map_df(standard_models, ~ fit_model(.))
 ```
 
