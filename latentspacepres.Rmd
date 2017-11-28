@@ -1,9 +1,7 @@
 ---
 title: "Graph Modeling Presentation"
 author: "Michael Jeremiah Curry"
-output: 
-  beamer_presentation: 
-    latex_engine: xelatex
+output: beamer_presentation
 ---
 
 # Introduction
@@ -102,19 +100,19 @@ $$
 - If you want to see how they derived it, it's in the paper
 - While the original implementation is not available, Blei and Linderman have theirs on Github.
 
-```{r,echo=FALSE,message=FALSE,warning=FALSE}
+```{r source,echo=FALSE,message=FALSE,warning=FALSE}
 source("R/latentspace_sample.R")
 ```
 
 ## Brain data: convergence
 
-```{r,echo=FALSE}
+```{r import,echo=FALSE}
 adjmats <- import_data() %>% process_data
 map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
 allAs <- allAs > 0
 ```
 
-```{r,echo=FALSE}
+```{r first_constants,echo=FALSE}
 missing_frac <- 0.25
 n_itr <- 100
 Ks <- seq(2L,21L,4L)
@@ -130,7 +128,7 @@ V <- Vorig - length(bad_indices)
 masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
 ```
 
-```{r, cache=TRUE,warning=FALSE,echo=FALSE}
+```{r run_mixture, cache=TRUE,warning=FALSE,echo=FALSE}
 mixture_models_sh <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name=paste0("mixture_shrinkage", .)))
 
 mixture_models_sh %>% walk(~ model_prep(., allAs, masks)) %>% walk(~ .$initialize)
@@ -144,7 +142,7 @@ mixture_model_sh_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + 
 
 ## Brain data: assignments
 
-```{r,echo=FALSE}
+```{r plot_mixture_assignments,echo=FALSE}
 assignments_table <- as_tibble(simplify2array(map(mixture_model_sh_results[[4]]$model, ~ .$hs)))
 assignments_table <- assignments_table %>% setNames(map(1:n_itr, paste0))
 assignments_table$graph <- 1:N
@@ -161,8 +159,7 @@ ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
 - This is good, these graphs are very similar to each other so the model is behaving appropriately.
 
 ## Random graphs: convergence
-
-```{r, echo=FALSE}
+```{r random_constants, echo=FALSE}
 adjmats <- import_data() %>% process_data
 map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
 allAs <- allAs > 0
@@ -170,7 +167,7 @@ for (i in 1:10) {
   allAs <- abind(allAs, round(matrix(runif(70*70), 70, 70)), along=1)
 }
 missing_frac <- 0.25
-n_itr <- 100
+n_itr <- 300
 Ks <- seq(2L,21L,4L)
 sigmasq_b <- 1.0
 H <- 10L
@@ -185,7 +182,8 @@ allAs <- allAs > 0
 masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
 ```
 
-```{r, cache=TRUE,warning=FALSE,echo=FALSE}
+```{r run_random_model, cache=TRUE,warning=FALSE,echo=FALSE}
+
 mixture_models_rand <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name=paste0("mixture_rand", .)))
 
 mixture_models_rand %>% walk(~ model_prep(., allAs, masks)) %>% walk(~ .$initialize)
