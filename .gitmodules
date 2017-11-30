@@ -1,0 +1,3 @@
+[submodule "pypolyagamma"]
+	path = pypolyagamma
+	url = https://github.com/slinderman/pypolyagamma.git
