@@ -3,4 +3,4 @@
 	url = https://github.com/slinderman/pypolyagamma.git
 [submodule "factorial-network-models"]
 	path = factorial-network-models
-	url = git@github.com:blei-lab/factorial-network-models.git
+	url = https://github.com/blei-lab/factorial-network-models.git
