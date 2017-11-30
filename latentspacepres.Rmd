@@ -1,7 +1,9 @@
 ---
 title: "Graph Modeling Presentation"
 author: "Michael Jeremiah Curry"
-output: beamer_presentation
+output:
+  beamer_presentation: default
+  ioslides_presentation: default
 ---
 
 # Introduction
@@ -183,7 +185,6 @@ masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
 ```
 
 ```{r run_random_model, cache=TRUE,warning=FALSE,echo=FALSE}
-
 mixture_models_rand <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name=paste0("mixture_rand", .)))
 
 mixture_models_rand %>% walk(~ model_prep(., allAs, masks)) %>% walk(~ .$initialize)
@@ -214,7 +215,7 @@ ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
 ## Conclusions
 
 - This model seems to work pretty well, at least in these simple cases
-- The goal is ultimately to distinguish populations
+- The goal is ultimately to distinguish populations 
   - Given unlabelled data, maybe we can find structure (cluster assignments)
   - Fitting on a population we can compute likelihood of another and hypothesis test
   - Simulate many draws and compare specific derived quantities.
