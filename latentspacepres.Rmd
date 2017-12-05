@@ -2,17 +2,51 @@
 title: "Graph Modeling Presentation"
 author: "Michael Jeremiah Curry"
 output:
-  beamer_presentation: default
   ioslides_presentation: default
+  beamer_presentation: default
 ---
 
 # Introduction
 
-## Network-valued random-variables
+## The data
 
-- Want a probability distribution over the space of networks
-- In practice this means a probability distribution over a space of matrices
-- Or for simple undirected graphs, just a space of binary vectors
+- Structural (not functional) connectivity
+- White matter, derived from DTI/tractography
+- Between macroscopic brain regions (Desikan atlas)
+- Undirected, unweighted
+
+## Diffusion tensor imaging (DTI)
+
+- Measure direction of water flow using MRI
+- Water flows parallel to nerve fibers, so DTI tells us a lot about their structure
+- Places where flow is strongly obstructed in all but one direction are likely bundles of axons (anisotropic)
+
+## Tractography
+
+- Follow paths of high anisotropy to trace out locations of nerve fibers
+- Images are very deceptive; they are very pretty but not "real"
+- Where fibers cross, it tends to break down (absent more complex models)
+- C. Thomas et al., “Anatomical accuracy of brain connections derived from diffusion MRI tractography is inherently limited,” Proc Natl Acad Sci U S A, vol. 111, no. 46, pp. 16574–16579, Nov. 2014.
+
+## Perhaps it's okay, though
+
+- Here, brain voxels were segmented into 68 known anatomical regions (Desikan atlas)
+- With large regions like this known to correspond to anatomical reality, tractography is less problematic
+
+## The dataset
+
+- From the Open Connectome Project
+- Healthy humans, DTI and tractography performed, segmented according to Desikan atlas
+- Undirected, unweighted graphs
+  - Vertices are brain regions
+  - An edge exists if there is a track with endpoints in a pair of regions
+
+## Properties of the data
+
+- Each observation is a complete network
+- The measurements are reasonably trustworthy, for our purposes we assume there are not spurious or missing edges in a given observation (not modeling errors for the moment)
+- The set of vertices is the same across all samples
+- Want a random variable whose values are whole networks, and where the identity of the vertices matters
 
 ## Papers
 
@@ -28,8 +62,8 @@ output:
 
 ### Latent space models
 
-- Each vertex is assumed to come from some latent space
-- Can think of the latent space as "features"
+- Each vertex is assumed to be a vector in some latent space
+- Can think of the latent space as "features" or a kernel
 - Nearness in latent space determines edge probability
 - There may be global feature weights
 - In this specific case, features are low-rank factorization of the adjacency matrix
@@ -43,6 +77,7 @@ output:
 
 ## Model likelihood
 
+$$
 \begin{align*}
  &p \left(A_n |
     Z, \{\{x_v^{(h)}\}_{v=1}^V,
@@ -51,6 +86,7 @@ output:
   \text{Bern} \left(A_{n,[u,v]} |
     \sigma(z_{u,v} + x_{u}^{(h_n)^\intercal} \Lambda^{(h_n)} x_v^{(h_n)}) \right)
 \end{align*}
+$$
 
 ## Left-hand side:
 
@@ -58,8 +94,7 @@ $$
 p \left(A_n | Z, \{\{x_v^{(h)}\}_{v=1}^V, \lambda^{(h)}\}_{h=1}^H, h_n \right) 
 $$
 
-- $A_n$: the $n$th network
-
+- $A_n$: the $n$th network from the data
 - $x_v^{(h)}$: the latent space parameters of vertex $v$ in mixture component $h$.
 - $\lambda^{(h)}$: a scaling factor for mixture component $h$
 - $Z$: a bias applied for each edge
@@ -83,8 +118,8 @@ $$
 ## Prior distribution -- mixtures
 
 - A "multiplicative inverse gamma", parameters are $a_1$ and $a_2$
-- Basically just encourages sparsity (the vector $\lambda^{(h)}$ will have fewer components)
-- They do it in this complicated way because it guarantees full support, apparently
+- Key fact is that it encourages sparsity (the vector $\lambda^{(h)}$ will have fewer components)
+- They do it in this complicated way because it guarantees full support (all possible graphs have nonzero probability)
 $$
 \lambda_r^{(h)} = \prod_{m=1}^r \frac{1}{\nu_m^{(h)}}, \text{ where } \nu_1^{h} \thicksim \Gamma(a_1, 1),\: \nu_{\ge 2}^{(h)} \thicksim \Gamma(a_2, 1)
 $$
@@ -100,6 +135,9 @@ $$
 
 - Monte Carlo method
 - If you want to see how they derived it, it's in the paper
+- Key fact: in each iteration, cluster assignments are sampled first
+  - only parameters relevant to the sampled clusters are updated
+  - so as sparsity encourages most cluster probabilities to be driven to zero, computation time is not wasted on their parameters
 - While the original implementation is not available, Blei and Linderman have theirs on Github.
 
 ```{r source,echo=FALSE,message=FALSE,warning=FALSE}
@@ -144,14 +182,20 @@ mixture_model_sh_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + 
 
 ## Brain data: assignments
 
-```{r plot_mixture_assignments,echo=FALSE}
-assignments_table <- as_tibble(simplify2array(map(mixture_model_sh_results[[4]]$model, ~ .$hs)))
+```{r, echo=FALSE}
+plot_mixture_assignments <- function(mixture_model_results) {
+  assignments_table <- as_tibble(simplify2array(map(mixture_model_results$model, ~ .$hs)))
 assignments_table <- assignments_table %>% setNames(map(1:n_itr, paste0))
 assignments_table$graph <- 1:N
 assignments_df <- gather(assignments_table, iter, cluster, -graph)
 assignments_df$cluster <- as.factor(assignments_df$cluster)
 assignments_df$iter <- map_int(assignments_df$iter,strtoi)
 ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
+}
+```
+
+```{r plot_mixture_assignments,echo=FALSE}
+plot_mixture_assignments(mixture_model_sh_results[[4]])
 ```
 
 ## Brain data: assignments
@@ -161,15 +205,19 @@ ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
 - This is good, these graphs are very similar to each other so the model is behaving appropriately.
 
 ## Random graphs: convergence
-```{r random_constants, echo=FALSE}
+
+```{r}
 adjmats <- import_data() %>% process_data
 map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
 allAs <- allAs > 0
-for (i in 1:10) {
-  allAs <- abind(allAs, round(matrix(runif(70*70), 70, 70)), along=1)
-}
+graphdims <- dim(adjmats[[1]])
+rand_mats <- array(rbernoulli(graphdims[1]*graphdims[2]*10), dim=c(10,graphdims[1],graphdims[2]))
+allAs <- abind(allAs, rand_mats, along=1)
+```
+
+```{r random_constants, echo=FALSE}
 missing_frac <- 0.25
-n_itr <- 300
+n_itr <- 100
 Ks <- seq(2L,21L,4L)
 sigmasq_b <- 1.0
 H <- 10L
@@ -180,37 +228,65 @@ bad_indices <- c(1,36)
 good_indices <- (1:Vorig)[!((1:Vorig) %in% bad_indices)]
 allAs <- allAs[, good_indices, good_indices]
 V <- Vorig - length(bad_indices)
-allAs <- allAs > 0
 masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
 ```
 
 ```{r run_random_model, cache=TRUE,warning=FALSE,echo=FALSE}
-mixture_models_rand <- map(Ks, ~ lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, .*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name=paste0("mixture_rand", .)))
+mixture_model_rand <-  lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, 4L*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name="mixture_rand4")
 
-mixture_models_rand %>% walk(~ model_prep(., allAs, masks)) %>% walk(~ .$initialize)
-mixture_model_rand_results <- pblapply(mixture_models_rand, function(x) {fit_model(x, n_iter=n_itr, progress_bar=FALSE)})
-mixture_model_rand_df <- map(mixture_model_rand_results, ~ .$df) %>% bind_rows
+model_prep(mixture_model_rand, allAs, masks)
+mixture_model_rand$initialize()
+mixture_model_rand_results <- fit_model(mixture_model_rand, n_iter=n_itr, progress_bar=FALSE)
+mixture_model_rand_df <- mixture_model_rand_results$df
 ```
 
 
-```{r,echo=FALSE}
-mixture_model_rand_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + geom_line()
-```
 
 ## Random graphs: assignments
 
 - The graphs are correctly split into two clusters.
 
-```{r,echo=FALSE}
-assignments_table <- as_tibble(simplify2array(map(mixture_model_rand_results[[4]]$model, ~ .$hs)))
-assignments_table <- assignments_table %>% setNames(map(1:n_itr, paste0))
-assignments_table$graph <- 1:N
-assignments_df <- gather(assignments_table, iter, cluster, -graph)
-assignments_df$cluster <- as.factor(assignments_df$cluster)
-assignments_df$iter <- map_int(assignments_df$iter,strtoi)
-ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
+```{r, echo=FALSE}
+plot_mixture_assignments(mixture_model_rand_results)
+```
+## Random Changes to Graphs
+
+```{r}
+adjmats <- import_data() %>% process_data
+map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
+allAs <- allAs > 0
+graphdims <- dim(adjmats[[1]])
+rand_mats <- abind(array(rbernoulli(graphdims[1]*graphdims[2]*21,0.75), dim=c(21,graphdims[1],graphdims[2])), array(TRUE,c(21,graphdims[1], graphdims[2])), along=1)
+allAs <- allAs & rand_mats
 ```
 
+```{r}
+missing_frac <- 0.25
+n_itr <- 100
+Ks <- seq(2L,21L,4L)
+sigmasq_b <- 1.0
+H <- 10L
+arrDims <- dim(allAs)
+N <- arrDims[1]
+Vorig <- arrDims[2]
+bad_indices <- c(1,36)
+good_indices <- (1:Vorig)[!((1:Vorig) %in% bad_indices)]
+allAs <- allAs[, good_indices, good_indices]
+V <- Vorig - length(bad_indices)
+masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
+```
+
+```{r perturbed, cache=TRUE,warning=FALSE,echo=FALSE}
+mixture_model_perturbed <- lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, 4L*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name="mixture_perturbed")
+model_prep(mixture_model_perturbed, allAs, masks)
+mixture_model_perturbed$initialize()
+mixture_model_p_results <- fit_model(mixture_model_perturbed, n_iter=n_itr, progress_bar=FALSE)
+mixture_model_p_df <- mixture_model_p_results$df
+```
+
+```{r, echo=FALSE}
+plot_mixture_assignments(mixture_model_p_results)
+```
 
 ## Conclusions
 
