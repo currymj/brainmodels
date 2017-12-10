@@ -7,7 +7,7 @@ library(reticulate)
 
 source("R/getdata.R")
 
-use_condaenv("factorial")
+use_condaenv("reticulate")
 lsm <- reticulate::import("lsm")
 lsm.utils <- reticulate::import("lsm.utils")
 np <- reticulate::import("numpy")

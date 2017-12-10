@@ -1,9 +1,9 @@
 ---
-title: "Graph Modeling Presentation"
+title: "Modeling Populations of Structural Brain Networks"
 author: "Michael Jeremiah Curry"
 output:
-  ioslides_presentation: default
   beamer_presentation: default
+  ioslides_presentation: default
 ---
 
 # Introduction
@@ -66,7 +66,6 @@ output:
 - Can think of the latent space as "features" or a kernel
 - Nearness in latent space determines edge probability
 - There may be global feature weights
-- In this specific case, features are low-rank factorization of the adjacency matrix
 
 ### Mixture models
 
@@ -77,7 +76,7 @@ output:
 
 ## Model likelihood
 
-$$
+
 \begin{align*}
  &p \left(A_n |
     Z, \{\{x_v^{(h)}\}_{v=1}^V,
@@ -86,7 +85,7 @@ $$
   \text{Bern} \left(A_{n,[u,v]} |
     \sigma(z_{u,v} + x_{u}^{(h_n)^\intercal} \Lambda^{(h_n)} x_v^{(h_n)}) \right)
 \end{align*}
-$$
+
 
 ## Left-hand side:
 
@@ -97,7 +96,7 @@ $$
 - $A_n$: the $n$th network from the data
 - $x_v^{(h)}$: the latent space parameters of vertex $v$ in mixture component $h$.
 - $\lambda^{(h)}$: a scaling factor for mixture component $h$
-- $Z$: a bias applied for each edge
+- $Z$: a bias applied for each edge, independent of component
 - $h_n$: the mixture component we suppose $A_n$ came from
 
 ## Right-hand side:
@@ -115,6 +114,10 @@ $$
 - $\Lambda^{h(n)}$: just $\text{diag}(\lambda^{(h_n)})$ (same scaling factors as matrix)
 - $\sigma$: just the logistic function (squashes between 0 and 1)
 
+## Plate diagram
+
+![plate diagram](diagram.png)
+
 ## Prior distribution -- mixtures
 
 - A "multiplicative inverse gamma", parameters are $a_1$ and $a_2$
@@ -124,12 +127,16 @@ $$
 \lambda_r^{(h)} = \prod_{m=1}^r \frac{1}{\nu_m^{(h)}}, \text{ where } \nu_1^{h} \thicksim \Gamma(a_1, 1),\: \nu_{\ge 2}^{(h)} \thicksim \Gamma(a_2, 1)
 $$
 
+## Bias towards sparsity ("nonparametrics")
+
+- Traditionally the phrase "Bayesian nonparametrics" refers to models where the number of mixture components (or some other parameter) is unbounded and adapts to the data
+- Here, there is a fixed upper bound, but set unnecessarily high, with the priors ensuring that most components won't be used
+- David Blei, the king of nonparametrics, seems okay with this
+
 ## Prior distribution parameters
 
 - Edge biases are Gaussian: $Z \thicksim \mathbf{N}_{V(V-1)/2}(\mu, \Sigma)$
 - So are latent parameters: $X_{vr}^{h} \thicksim \mathbf{N}(0, 1)$
-
-# Fitting
 
 ## Gibbs sampler
 
@@ -143,6 +150,14 @@ $$
 ```{r source,echo=FALSE,message=FALSE,warning=FALSE}
 source("R/latentspace_sample.R")
 ```
+
+# Testing
+
+## Testing methodology
+
+- Fit on DTI data
+- Random changes to networks, and/or random graphs from known distributions
+- Questions: how fast does convergence occur, and what can model detect?
 
 ## Brain data: convergence
 
@@ -183,7 +198,7 @@ mixture_model_sh_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + 
 ## Brain data: assignments
 
 ```{r, echo=FALSE}
-plot_mixture_assignments <- function(mixture_model_results) {
+plot_mixture_assignments <- function(mixture_model_results, N, n_itr) {
   assignments_table <- as_tibble(simplify2array(map(mixture_model_results$model, ~ .$hs)))
 assignments_table <- assignments_table %>% setNames(map(1:n_itr, paste0))
 assignments_table$graph <- 1:N
@@ -195,7 +210,7 @@ ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
 ```
 
 ```{r plot_mixture_assignments,echo=FALSE}
-plot_mixture_assignments(mixture_model_sh_results[[4]])
+plot_mixture_assignments(mixture_model_sh_results[[4]], N, n_itr)
 ```
 
 ## Brain data: assignments
@@ -204,9 +219,7 @@ plot_mixture_assignments(mixture_model_sh_results[[4]])
 - All about the same, all ended up converging on assigning all graphs to a single component
 - This is good, these graphs are very similar to each other so the model is behaving appropriately.
 
-## Random graphs: convergence
-
-```{r}
+```{r, echo=FALSE}
 adjmats <- import_data() %>% process_data
 map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
 allAs <- allAs > 0
@@ -241,17 +254,19 @@ mixture_model_rand_df <- mixture_model_rand_results$df
 ```
 
 
+## Random graphs
 
-## Random graphs: assignments
-
-- The graphs are correctly split into two clusters.
+- If we add some Bernoulli random graphs into the mix, they are correctly split into two clusters.
 
 ```{r, echo=FALSE}
-plot_mixture_assignments(mixture_model_rand_results)
+plot_mixture_assignments(mixture_model_rand_results, N, n_itr)
 ```
+
 ## Random Changes to Graphs
 
-```{r}
+- If we randomly perturb some edges to existing graphs, they are not correctly split into two clusters
+
+```{r, echo=FALSE}
 adjmats <- import_data() %>% process_data
 map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
 allAs <- allAs > 0
@@ -260,7 +275,7 @@ rand_mats <- abind(array(rbernoulli(graphdims[1]*graphdims[2]*21,0.75), dim=c(21
 allAs <- allAs & rand_mats
 ```
 
-```{r}
+```{r,echo=FALSE}
 missing_frac <- 0.25
 n_itr <- 100
 Ks <- seq(2L,21L,4L)
@@ -285,16 +300,67 @@ mixture_model_p_df <- mixture_model_p_results$df
 ```
 
 ```{r, echo=FALSE}
-plot_mixture_assignments(mixture_model_p_results)
+plot_mixture_assignments(mixture_model_p_results, N, n_itr)
 ```
 
-## Conclusions
 
-- This model seems to work pretty well, at least in these simple cases
-- The goal is ultimately to distinguish populations 
-  - Given unlabelled data, maybe we can find structure (cluster assignments)
-  - Fitting on a population we can compute likelihood of another and hypothesis test
-  - Simulate many draws and compare specific derived quantities.
-- Questions
-  - Can it identify more subtle latent structures?
-  - Can we condition on non-network observed variables (i.e. characteristics of individuals)?
+## Specific Random Changes to Graphs
+
+- If we limit this random perturbation to edges within a small number of vertices, no difference is detected
+
+```{r, echo=FALSE}
+adjmats <- import_data() %>% process_data
+map(adjmats, as.matrix) %>% abind(along=3) %>% aperm(perm=c(3,1,2)) -> allAs
+allAs <- allAs > 0
+graphdims <- dim(adjmats[[1]])
+maskArray <- array(TRUE, c(21, graphdims[1], graphdims[2]))
+maskArray[1:21, 5:10,5:10] <- FALSE
+rand_mats <- abind(maskArray | array(rbernoulli(graphdims[1]*graphdims[2]*21,0.75), dim=c(21,graphdims[1],graphdims[2])), array(TRUE,c(21,graphdims[1], graphdims[2])), along=1)
+allAs <- allAs & rand_mats
+```
+
+```{r,echo=FALSE}
+missing_frac <- 0.25
+n_itr <- 100
+Ks <- seq(2L,21L,4L)
+sigmasq_b <- 1.0
+H <- 10L
+arrDims <- dim(allAs)
+N <- arrDims[1]
+Vorig <- arrDims[2]
+bad_indices <- c(1,36)
+good_indices <- (1:Vorig)[!((1:Vorig) %in% bad_indices)]
+allAs <- allAs[, good_indices, good_indices]
+V <- Vorig - length(bad_indices)
+masks <- replicate(N, lsm.utils$random_mask(V, missing_frac))
+```
+
+```{r p2, cache=TRUE,warning=FALSE,echo=FALSE}
+mixture_model_p2 <- lsm$MixtureOfLatentSpaceModelsWithShrinkage(V, 4L*H, H=H, sigmasq_b=sigmasq_b, sigmasq_prior_prms=dict(a1=2.5, a2=3.5), name="mixture_perturbed")
+model_prep(mixture_model_p2, allAs, masks)
+mixture_model_p2$initialize()
+mixture_model_p2_results <- fit_model(mixture_model_p2, n_iter=n_itr, progress_bar=FALSE)
+mixture_model_p2_df <- mixture_model_p2_results$df
+```
+
+```{r, echo=FALSE}
+plot_mixture_assignments(mixture_model_p2_results, N, n_itr)
+```
+
+# Conclusions
+
+## Is the model viable?
+
+- Not very good results on these simple simulations
+- It's worth exploring further, and does seem pretty powerful
+- Good results in papers
+- David Blei approves of it
+- I would like to test it on real data with psychological or other covariates, if I had access (replicate result in a paper)
+
+## Future work
+
+- Extension for hypothesis testing -- Dunson and Durante have done this
+- What kind of structural changes can it distinguish?
+- Posterior predictive checks on network statistics (this one hopefully goes in the final report, it's just computationally intensive)
+- Extension to weighted graphs
+  - in the naive case, replacing the Bernoulli with a Gaussian should actully make things easier, but that may not be the right model
