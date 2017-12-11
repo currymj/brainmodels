@@ -4,37 +4,19 @@ author: "Michael Jeremiah Curry"
 output: html_document
 ---
 
-# Introduction
 
-## Abstract
+
+# Abstract
 
 Diffusion tensor imaging, a means of using MR signal to approximately measure orientation and other properties of nerve fibers in the brain, can be used to map out structural connections between brain regions via white matter pathways. These pathways form networks, and thus ought to be amenable to the mathematical tools of network analysis. However, they have some unusually nice properties that many of these tools do not exploit. Vertices across all individuals can be identified with each other (whereas most network models don't make this assumption), and the presence or absence of edges is reasonably trustworthy (whereas most network models assume this is noisy, or that the observed graph is a subset of the true network). The problem instead becomes dealing with the case where we have many accurate samples from the same network-valued random variable, with a fixed set of vertices. We consider a particular Bayesian nonparametric model for approximating such random variables, presented by Durante, Dunson, and Vogelstein and further analyzed by Linderman and Blei. Results on simple simulations are mixed but the model is efficient and shows promise.
 
 
-## The data
+# Datasets
 
 - Structural (not functional) connectivity
 - White matter, derived from DTI/tractography
 - Between macroscopic brain regions (Desikan atlas)
 - Undirected, unweighted
-
-## Diffusion tensor imaging (DTI)
-
-- Measure direction of water flow using MRI
-- Water flows parallel to nerve fibers, so DTI tells us a lot about their structure
-- Places where flow is strongly obstructed in all but one direction are likely bundles of axons (anisotropic)
-
-## Tractography
-
-- Follow paths of high anisotropy to trace out locations of nerve fibers
-- Images are very deceptive; they are very pretty but not "real"
-- Where fibers cross, it tends to break down (absent more complex models)
-- C. Thomas et al., “Anatomical accuracy of brain connections derived from diffusion MRI tractography is inherently limited,” Proc Natl Acad Sci U S A, vol. 111, no. 46, pp. 16574–16579, Nov. 2014.
-
-## Perhaps it's okay, though
-
-- Here, brain voxels were segmented into 68 known anatomical regions (Desikan atlas)
-- With large regions like this known to correspond to anatomical reality, tractography is less problematic
 
 ## The dataset
 
@@ -44,6 +26,21 @@ Diffusion tensor imaging, a means of using MR signal to approximately measure or
   - Vertices are brain regions
   - An edge exists if there is a track with endpoints in a pair of regions
 
+## Diffusion tensor imaging (DTI), tractography, and limitations
+
+- Measure direction of water flow using MRI
+- Water flows parallel to nerve fibers, so DTI tells us a lot about their structure
+- Places where flow is strongly obstructed in all but one direction are likely bundles of axons (anisotropic)
+
+- Follow paths of high anisotropy to trace out locations of nerve fibers
+- Images are very deceptive; they are very pretty but not "real"
+- Where fibers cross, it tends to break down (absent more complex models)
+- C. Thomas et al., “Anatomical accuracy of brain connections derived from diffusion MRI tractography is inherently limited,” Proc Natl Acad Sci U S A, vol. 111, no. 46, pp. 16574–16579, Nov. 2014.
+
+- Here, brain voxels were segmented into 68 known anatomical regions (Desikan atlas)
+- With large regions like this known to correspond to anatomical reality, tractography is less problematic
+
+
 ## Properties of the data
 
 - Each observation is a complete network
@@ -51,7 +48,7 @@ Diffusion tensor imaging, a means of using MR signal to approximately measure or
 - The set of vertices is the same across all samples
 - Want a random variable whose values are whole networks, and where the identity of the vertices matters
 
-## Papers
+# Papers
 
 - "Nonparametric Bayes Modeling of Populations of Networks"
   - by Daniele Durante, David B. Dunson, Joshua T. Vogelstein
@@ -59,18 +56,18 @@ Diffusion tensor imaging, a means of using MR signal to approximately measure or
   - by Scott W. Linderman and David Blei
   - https://github.com/blei-lab/factorial-network-models
 
-## The model(s)
+# The model(s)
 
 - Combines two ideas
 
-### Latent space models
+## Latent space models
 
 - Each vertex is assumed to be a vector in some latent space
 - Can think of the latent space as "features" or a kernel
 - Nearness in latent space determines edge probability
 - There may be global feature weights
 
-### Mixture models
+## Mixture models
 
 - The whole distribution is a mixture of many such models; first pick a model then draw a graph
 - "Which mixture" is a latent variable; we're likely interested in the posterior distribution of this given an observed graph.
@@ -256,7 +253,21 @@ mixture_model_rand_results <- fit_model(mixture_model_rand, n_iter=n_itr, progre
 mixture_model_rand_df <- mixture_model_rand_results$df
 ```
 
+```{r posterior_predictive, cache=TRUE, warning=FALSE, echo=FALSE}
+library(statnet)
 
+samples <- 1:1000 %>% 
+  map(~ mixture_model_p2$generate(keep=FALSE)) %>% 
+  map(~ network(., directed=FALSE))
+
+degree_counts <- samples %>% map(~ degree(.)) %>% unlist
+between_scores <- samples %>% map(~ betweenness(.)) %>% unlist
+close_scores <- samples %>% map(~ closeness(.)) %>% unlist
+triads <- samples %>% 
+  map(~ triad.census(.)) %>% 
+  reduce(~ .x + .y) %>% 
+  function(triad) {triad/sqrt(sum(triad^2))}
+```
 ## Random graphs
 
 - If we add some Bernoulli random graphs into the mix, they are correctly split into two clusters.
