@@ -2,59 +2,34 @@
 title: "Modeling Populations of Structural Brain Networks"
 author: "Michael Jeremiah Curry"
 output: html_document
+bibliography: bibliography.bib
 ---
 
 
 
 # Abstract
 
-Diffusion tensor imaging, a means of using MR signal to approximately measure orientation and other properties of nerve fibers in the brain, can be used to map out structural connections between brain regions via white matter pathways. These pathways form networks, and thus ought to be amenable to the mathematical tools of network analysis. However, they have some unusually nice properties that many of these tools do not exploit. Vertices across all individuals can be identified with each other (whereas most network models don't make this assumption), and the presence or absence of edges is reasonably trustworthy (whereas most network models assume this is noisy, or that the observed graph is a subset of the true network). The problem instead becomes dealing with the case where we have many accurate samples from the same network-valued random variable, with a fixed set of vertices. We consider a particular Bayesian nonparametric model for approximating such random variables, presented by Durante, Dunson, and Vogelstein and further analyzed by Linderman and Blei. Results on simple simulations are mixed but the model is efficient and shows promise.
+Diffusion tensor imaging, a means of using MR signal to approximately measure orientation and other properties of nerve fibers in the brain, can be used to map out structural connections between brain regions via white matter pathways. These pathways form networks, and thus ought to be amenable to the mathematical tools of network analysis. However, they have some unusually nice properties that many of these tools do not exploit. Vertices across all individuals can be identified with each other (whereas most network models don't make this assumption), and the presence or absence of edges is reasonably trustworthy (whereas most network models assume this is noisy, or that the observed graph is a subset of the true network). The problem instead becomes dealing with the case where we have many accurate samples from the same network-valued random variable, with a fixed set of vertices. We consider a particular Bayesian nonparametric model for approximating such random variables, presented by Durante, Dunson, and Vogelstein [@durante_nonparametric_2016] and further analyzed by Linderman and Blei [@linderman_discussion_2017]. Results on simple simulations are mixed but the model is efficient and shows promise.
 
 
-# Datasets
+# Data and its problems
 
-- Structural (not functional) connectivity
-- White matter, derived from DTI/tractography
-- Between macroscopic brain regions (Desikan atlas)
-- Undirected, unweighted
+## Data source
 
-## The dataset
-
-- From the Open Connectome Project
-- Healthy humans, DTI and tractography performed, segmented according to Desikan atlas
-- Undirected, unweighted graphs
-  - Vertices are brain regions
-  - An edge exists if there is a track with endpoints in a pair of regions
-
-## Diffusion tensor imaging (DTI), tractography, and limitations
-
-- Measure direction of water flow using MRI
-- Water flows parallel to nerve fibers, so DTI tells us a lot about their structure
-- Places where flow is strongly obstructed in all but one direction are likely bundles of axons (anisotropic)
-
-- Follow paths of high anisotropy to trace out locations of nerve fibers
-- Images are very deceptive; they are very pretty but not "real"
-- Where fibers cross, it tends to break down (absent more complex models)
-- C. Thomas et al., “Anatomical accuracy of brain connections derived from diffusion MRI tractography is inherently limited,” Proc Natl Acad Sci U S A, vol. 111, no. 46, pp. 16574–16579, Nov. 2014.
-
-- Here, brain voxels were segmented into 68 known anatomical regions (Desikan atlas)
-- With large regions like this known to correspond to anatomical reality, tractography is less problematic
+The data come from the Open Connectome Project, specifically the KKI-42 dataset (the same as used in the given papers) [landman cite here]. 21 healthy adult humans were scanned twice each, and the results processed using standard diffusion tensor imaging (DTI) methodology. From the diffusion tensor volumes, tractography was performed (a process where "streamlines" are traced along paths of high diffusion, approximately tracing out the paths of nerve fibers). Each brain volume was registered and segmented according to the Desikan atlas, which divides the human brain into 68 anatomical regions, each of which became a vertex in the resulting networks. As in the existing studies, we deal with unweighted, undirected graphs; in the resulting networks, an edge between any pair of the 68 vertices existed if there was at least one track between the corresponding regions.
 
 
-## Properties of the data
+## DTI, tractography, and their limitations
 
-- Each observation is a complete network
-- The measurements are reasonably trustworthy, for our purposes we assume there are not spurious or missing edges in a given observation (not modeling errors for the moment)
-- The set of vertices is the same across all samples
-- Want a random variable whose values are whole networks, and where the identity of the vertices matters
+Diffusion MRI involves using MR signal to measure the motion of water in tissue in one specific direction. By capturing many so-called diffusion weighted images, it is possible to fit a continuous model of water motion. Typically, the model used is a multivariate normal distribution in 3 dimensions (the same equation governing Brownian motion); the covariance matrix of this normal distribution can be thought of as a tensor, and this technique is known as diffusion tensor imaging, or DTI [basser cite]. The eigenvalues and eigenvectors of this covariance matrix provide useful information about the speed and direction of water movement.
 
-# Papers
+DTI does have limitations, though. In particular, when bundles of nerve fibers cross or touch, the standard DTI model cannot cope, and simply sees water movement restricted in all directions (there are more complex models, not as widely used, for avoiding this limitation). When DTI is used for tractography, this problem is of particular concern. Tractography involves following the direction of the largest eigenvector to trace out "tracks", which in general seem to have something to do with the paths of axons. When bundles of fibers cross or touch, tractography may take the wrong path, or stop entirely. This, along with other problems, have caused the originators of DTI-based tractography to urge researchers to use caution in interpreting their results [thomas cite]. In particular, the very colorful and attractive images produced by tractography are deceptively precise and look too much like real anatomy, and analyses of structural connectivity at a voxel level should probably not be trusted due to the possibility of spurious tracks.
 
-- "Nonparametric Bayes Modeling of Populations of Networks"
-  - by Daniele Durante, David B. Dunson, Joshua T. Vogelstein
-- A discussion of "Nonparametric Bayes Modeling of Populations of Networks" by Durante, Dunson, and Vogelstein (2016)
-  - by Scott W. Linderman and David Blei
-  - https://github.com/blei-lab/factorial-network-models
+In this case, though, connections are between large brain regions each of which is known to correspond to real anatomy. The parameters for tractography were also fairly conservative. So the problem of spurious tracks is much less severe: we're "averaging out" the noise, in some sense.
+
+## Interesting properties of the data
+
+The properties of the data (identifiability of vertices, and the safe assumption that each individual observation is correct, without spurious edges) are fairly unique, and not that well-studied in network analysis. Rather than trying to fit a graph as the result of some random growth process, or as a model that generated some other observed data, they treat each individual brain network as a single sample from a network-valued random variable, where the identity of vertices matters. This, along with concerns about efficient sampling, motivates the design of their model.
 
 # The model(s)
 
@@ -213,6 +188,42 @@ ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
 plot_mixture_assignments(mixture_model_sh_results[[4]], N, n_itr)
 ```
 
+Some posterior predictive checks:
+
+```{r posterior_predictive, cache=TRUE, warning=FALSE, echo=FALSE}
+library(statnet)
+library(gridExtra)
+library(plyr)
+chosen_model <- mixture_models_sh[[4]]
+samples <- 1:1000 %>% 
+  map(~ chosen_model$generate(keep=FALSE)) %>% 
+  map(~ network(., directed=FALSE))
+
+plot_vertex_stats <- function(samples) {
+degree_counts <- samples %>% map(~ degree(.)) %>% unlist
+between_scores <- samples %>% map(~ betweenness(.)) %>% unlist
+close_scores <- samples %>% map(~ closeness(.)) %>% unlist
+
+grid.arrange(histogram(degree_counts), histogram(between_scores), histogram(close_scores))
+}
+
+plot_triads <- function(samples) {
+triads <- samples %>% 
+  map(~ triad.census(., mode="graph")) %>% 
+  reduce(~ .x + .y) %>% 
+  (function(triad) {triad/sqrt(sum(triad^2))})
+barplot(triads)
+}
+
+plot_vertex_stats(samples)
+plot_triads(samples)
+
+adjmat_samples <-alply(allAs, 1)
+
+plot_vertex_stats(adjmat_samples)
+plot_triads(adjmat_samples)
+```
+
 ## Brain data: assignments
 
 - Fit with different numbers of components
@@ -227,6 +238,7 @@ graphdims <- dim(adjmats[[1]])
 rand_mats <- array(rbernoulli(graphdims[1]*graphdims[2]*10), dim=c(10,graphdims[1],graphdims[2]))
 allAs <- abind(allAs, rand_mats, along=1)
 ```
+
 
 ```{r random_constants, echo=FALSE}
 missing_frac <- 0.25
@@ -253,21 +265,6 @@ mixture_model_rand_results <- fit_model(mixture_model_rand, n_iter=n_itr, progre
 mixture_model_rand_df <- mixture_model_rand_results$df
 ```
 
-```{r posterior_predictive, cache=TRUE, warning=FALSE, echo=FALSE}
-library(statnet)
-
-samples <- 1:1000 %>% 
-  map(~ mixture_model_p2$generate(keep=FALSE)) %>% 
-  map(~ network(., directed=FALSE))
-
-degree_counts <- samples %>% map(~ degree(.)) %>% unlist
-between_scores <- samples %>% map(~ betweenness(.)) %>% unlist
-close_scores <- samples %>% map(~ closeness(.)) %>% unlist
-triads <- samples %>% 
-  map(~ triad.census(.)) %>% 
-  reduce(~ .x + .y) %>% 
-  function(triad) {triad/sqrt(sum(triad^2))}
-```
 ## Random graphs
 
 - If we add some Bernoulli random graphs into the mix, they are correctly split into two clusters.
