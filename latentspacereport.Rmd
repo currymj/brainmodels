@@ -97,14 +97,9 @@ $$
 
 There are theoretical results for simple mixtures of Gaussians suggesting that the Dirichlet prior is enough to encourage sparsity, reducing the numbers of mixture components. Durante et al only have empirical justifications here, but in practice this does seem to work (see below).
 
-## Gibbs sampler
+## Sampling -- Gibbs Sampler
 
-- Monte Carlo method
-- If you want to see how they derived it, it's in the paper
-- Key fact: in each iteration, cluster assignments are sampled first
-  - only parameters relevant to the sampled clusters are updated
-  - so as sparsity encourages most cluster probabilities to be driven to zero, computation time is not wasted on their parameters
-- While the original implementation is not available, Blei and Linderman have theirs on Github.
+The posterior distribution of the parameters given a set of observed networks is intractable to compute, as is usually the case in Bayesian latent variable models. One particular problem is introduced by the use of the sigmoid function to "squash" the inner product into a valid probability parameter for the Bernoulli distribution. They use a technique known as Polya-Gamma data augmentation. This involves parametrizing a Polya-Gamma distribution with the results of the inner product, sampling from this distribution, and then using the results to parametrize a normal distribution which is then sampled from to give the latent feature variables. Iterating these steps is shown to converge on the true posterior, in [cite Polson]. Other than this, the sampler is fairly straightforward.
 
 ```{r source,echo=FALSE,message=FALSE,warning=FALSE}
 source("R/latentspace_sample.R")
@@ -112,13 +107,15 @@ source("R/latentspace_sample.R")
 
 # Testing
 
-## Testing methodology
+As mentioned above, there were a few main concerns in testing the model:
 
-- Fit on DTI data
-- Random changes to networks, and/or random graphs from known distributions
-- Questions: how fast does convergence occur, and what can model detect?
+- Do the models actually converge in a reasonable amount of time?
+- Is sparsity actually encouraged: in other words, can the model adapt to having far too many mixture components ($H$ very large)?
+- Can the model distinguish components of simulated and real data, or components of real and modified real data?
 
-## Brain data: convergence
+## Convergence
+
+The models do seem to converge very quickly, at least in the log-likelihood they assign to the observed data. Crucially, fitting models with many mixture components did not seem to alter the rate of convergence all that much. This is a good sign: over-specifying the number of components doesn't impose a huge computational cost, meaning the model is closer to being truly nonparametric.
 
 ```{r import,echo=FALSE}
 adjmats <- import_data() %>% process_data
@@ -156,6 +153,8 @@ mixture_model_sh_df %>% ggplot(aes(x=iteration, y=log_likelihood,color=name)) + 
 
 ## Brain data: assignments
 
+Here are the component assignments sampled at each step for all the observed networks. Note that each column isn't the maximum a posteriori component assignment; instead, it is just a sample from the current posterior distribution. This is why there is some occasional "noise". Were we to compute the actual posterior distribution, it would basically be a histogram of these assignments and so overwhelmingly assign probability to the correct assignment.
+
 ```{r, echo=FALSE}
 plot_mixture_assignments <- function(mixture_model_results, N, n_itr) {
   assignments_table <- as_tibble(simplify2array(map(mixture_model_results$model, ~ .$hs)))
@@ -172,7 +171,7 @@ ggplot(assignments_df, aes(iter, graph, fill=cluster)) + geom_tile()
 plot_mixture_assignments(mixture_model_sh_results[[4]], N, n_itr)
 ```
 
-Some posterior predictive checks:
+Next we try some posterior predictive checks, i.e. sampling from the posterior and computing various summary statistics as compared to the observed data. In general, it seems that the posterior is generating graphs that are too dense. Given more computation time, it would be interesting to see whether the number of latent dimensions changes this -- in general, in higher dimensions, everything becomes farther apart.
 
 ```{r posterior_predictive, cache=TRUE, warning=FALSE, echo=FALSE}
 library(statnet)
@@ -207,12 +206,6 @@ adjmat_samples <-alply(allAs, 1)
 plot_vertex_stats(adjmat_samples)
 plot_triads(adjmat_samples)
 ```
-
-## Brain data: assignments
-
-- Fit with different numbers of components
-- All about the same, all ended up converging on assigning all graphs to a single component
-- This is good, these graphs are very similar to each other so the model is behaving appropriately.
 
 ```{r, echo=FALSE}
 adjmats <- import_data() %>% process_data
@@ -251,7 +244,7 @@ mixture_model_rand_df <- mixture_model_rand_results$df
 
 ## Random graphs
 
-- If we add some Bernoulli random graphs into the mix, they are correctly split into two clusters.
+If we add some Bernoulli random graphs into the mix, the random graphs and the real data are correctly split into two clusters (even when fit with 10 latent components.)
 
 ```{r, echo=FALSE}
 plot_mixture_assignments(mixture_model_rand_results, N, n_itr)
@@ -259,7 +252,7 @@ plot_mixture_assignments(mixture_model_rand_results, N, n_itr)
 
 ## Random Changes to Graphs
 
-- If we randomly perturb some edges to existing graphs, they are not correctly split into two clusters
+If we randomly perturb some edges to existing graphs, they are not correctly split into two clusters, although the model does try to cope.
 
 ```{r, echo=FALSE}
 adjmats <- import_data() %>% process_data
@@ -298,10 +291,7 @@ mixture_model_p_df <- mixture_model_p_results$df
 plot_mixture_assignments(mixture_model_p_results, N, n_itr)
 ```
 
-
-## Specific Random Changes to Graphs
-
-- If we limit this random perturbation to edges within a small number of vertices, no difference is detected
+On the other hand, if we instead perturb a small number of random edges, no difference is detected.
 
 ```{r, echo=FALSE}
 adjmats <- import_data() %>% process_data
@@ -346,16 +336,10 @@ plot_mixture_assignments(mixture_model_p2_results, N, n_itr)
 
 ## Is the model viable?
 
-- Not very good results on these simple simulations
-- It's worth exploring further, and does seem pretty powerful
-- Good results in papers
-- David Blei approves of it
-- I would like to test it on real data with psychological or other covariates, if I had access (replicate result in a paper)
+While the results in these simulations could be better, I'm not sure whether or not they reflect on the model. It may be the case that a more exhaustive exploration of the space of hyperparameters is needed. There are strong results in the paper and many interesting theoretical extensions (for example, making modifications to the model to allow for hypothesis testing between two populations, see [cite other dunson paper]).
 
 ## Future work
 
-- Extension for hypothesis testing -- Dunson and Durante have done this
-- What kind of structural changes can it distinguish?
-- Posterior predictive checks on network statistics (this one hopefully goes in the final report, it's just computationally intensive)
-- Extension to weighted graphs
-  - in the naive case, replacing the Bernoulli with a Gaussian should actully make things easier, but that may not be the right model
+First, it would be interesting to more fully explore the space of hyperparameters. While it seems like the model doesn't depend much on the number of mixture components, it's still not clear how the latent dimension affects things. Furthermore it might be helpful to initialize the model with more informed priors (of the same distributional forms).
+
+Further into the future, it would be very interesting to see if this model could be extended to weighted graphs. In the naive case, replacing the Bernoulli distribution with a Gaussian ought to make things easier, but it seems like that isn't necessarily the right model. Designing a latent variable model would take some thought, and it might be the case that different sampling techniques are needed to efficiently approximate the posterior.
