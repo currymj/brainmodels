@@ -5,11 +5,9 @@ output: html_document
 bibliography: bibliography.bib
 ---
 
-
-
 # Abstract
 
-Diffusion tensor imaging, a means of using MR signal to approximately measure orientation and other properties of nerve fibers in the brain, can be used to map out structural connections between brain regions via white matter pathways. These pathways form networks, and thus ought to be amenable to the mathematical tools of network analysis. However, they have some unusually nice properties that many of these tools do not exploit. Vertices across all individuals can be identified with each other (whereas most network models don't make this assumption), and the presence or absence of edges is reasonably trustworthy (whereas most network models assume this is noisy, or that the observed graph is a subset of the true network). The problem instead becomes dealing with the case where we have many accurate samples from the same network-valued random variable, with a fixed set of vertices. We consider a particular Bayesian nonparametric model for approximating such random variables, presented by Durante, Dunson, and Vogelstein [@durante_nonparametric_2016] and further analyzed by Linderman and Blei [@linderman_discussion_2017]. Results on simple simulations are mixed but the model is efficient and shows promise.
+Diffusion tensor imaging, a means of using MR signal to approximately measure orientation and other properties of nerve fibers in the brain, can be used to map out structural connections between brain regions via white matter pathways. These pathways form networks, and thus ought to be amenable to the mathematical tools of network analysis. However, they have some unusually nice properties that many of these tools do not exploit. Vertices across all individuals can be identified with each other (whereas most network models don't make this assumption), and the presence or absence of edges is reasonably trustworthy (whereas most network models assume this is noisy, or that the observed graph is a subset of the true network). The problem instead becomes dealing with the case where we have many accurate samples from the same network-valued random variable, with a fixed set of vertices. We consider a particular Bayesian nonparametric model for approximating such random variables, presented by Durante, Dunson, and Vogelstein [-@durante_nonparametric_2016] and further analyzed by Linderman and Blei [-@linderman_discussion_2017]. Results on simple simulations are mixed but the model is efficient and shows promise.
 
 
 # Data and its problems
@@ -343,3 +341,5 @@ While the results in these simulations could be better, I'm not sure whether or 
 First, it would be interesting to more fully explore the space of hyperparameters. While it seems like the model doesn't depend much on the number of mixture components, it's still not clear how the latent dimension affects things. Furthermore it might be helpful to initialize the model with more informed priors (of the same distributional forms).
 
 Further into the future, it would be very interesting to see if this model could be extended to weighted graphs. In the naive case, replacing the Bernoulli distribution with a Gaussian ought to make things easier, but it seems like that isn't necessarily the right model. Designing a latent variable model would take some thought, and it might be the case that different sampling techniques are needed to efficiently approximate the posterior.
+
+# Bibliography
