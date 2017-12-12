@@ -33,24 +33,9 @@ The properties of the data (identifiability of vertices, and the safe assumption
 
 # The model(s)
 
-- Combines two ideas
+The model is a mixture of latent space models. Each mixture component represents each vertex as a point in a latent space. Assuming a particular observed network comes from a given mixture component, the probability of an edge between two vertices is proportional to a weighted inner product between these latent points (this inner product constitutes a kernel between vertices), plus some global biases for each edge. Each mixture component is weighted by a probability, and the model is designed so that mixture components that are not needed will tend to have their weights drop to zero.
 
-## Latent space models
-
-- Each vertex is assumed to be a vector in some latent space
-- Can think of the latent space as "features" or a kernel
-- Nearness in latent space determines edge probability
-- There may be global feature weights
-
-## Mixture models
-
-- The whole distribution is a mixture of many such models; first pick a model then draw a graph
-- "Which mixture" is a latent variable; we're likely interested in the posterior distribution of this given an observed graph.
-
-# Statement of Model
-
-## Model likelihood
-
+## Statement of Model Likelihood
 
 \begin{align*}
  &p \left(A_n |
@@ -61,12 +46,7 @@ The properties of the data (identifiability of vertices, and the safe assumption
     \sigma(z_{u,v} + x_{u}^{(h_n)^\intercal} \Lambda^{(h_n)} x_v^{(h_n)}) \right)
 \end{align*}
 
-
-## Left-hand side:
-
-$$
-p \left(A_n | Z, \{\{x_v^{(h)}\}_{v=1}^V, \lambda^{(h)}\}_{h=1}^H, h_n \right) 
-$$
+The variables on the left hand side are defined as follows:
 
 - $A_n$: the $n$th network from the data
 - $x_v^{(h)}$: the latent space parameters of vertex $v$ in mixture component $h$.
@@ -74,14 +54,8 @@ $$
 - $Z$: a bias applied for each edge, independent of component
 - $h_n$: the mixture component we suppose $A_n$ came from
 
-## Right-hand side:
+On the right-hand side:
 
-$$
-\prod_{u=1}^V \prod_{v=1}^{u-1}
-  \text{Bern} \left(A_{n,[u,v]} |
-    \sigma(z_{u,v} + x_{u}^{(h_n)^\intercal} \Lambda^{(h_n)} x_v^{(h_n)}) \right).
-$$
-    
 - $A_n$: the $n$th network
 - $h_n$: the mixture component we suppose $A_n$ comes from
 - $x_u, x_v$: latent space vectors (per component $h_n$)
@@ -89,29 +63,39 @@ $$
 - $\Lambda^{h(n)}$: just $\text{diag}(\lambda^{(h_n)})$ (same scaling factors as matrix)
 - $\sigma$: just the logistic function (squashes between 0 and 1)
 
-## Plate diagram
+![A plate diagram of the model, taken from Durante et al.](diagram.png)
 
-![plate diagram](diagram.png)
+## Prior distributions
 
-## Prior distribution -- mixtures
+### Latent parameters
 
-- A "multiplicative inverse gamma", parameters are $a_1$ and $a_2$
-- Key fact is that it encourages sparsity (the vector $\lambda^{(h)}$ will have fewer components)
-- They do it in this complicated way because it guarantees full support (all possible graphs have nonzero probability)
+The edge biases are Gaussian and the edge features are Gaussian, i.e. we have
+
+$$
+Z \thicksim \mathbf{N}_{V(V-1)/2}(\mu, \Sigma)
+$$
+$$
+X_{ij}^{h} \thicksim \mathbf{N}(0, 1)
+$$
+
+### Feature weights -- sparsity encouraged
+
+The weights assigned to features have a "multiplicative inverse gamma" prior, as shown below. Essentially, each latent model is encouraged to use as few features as possible; however, full support is still guaranteed, meaning the model remains capable of representing any graph. (Note also that the normal priors on $X$ above are in some sense equivalent to $l_2$ regularization.)
+
 $$
 \lambda_r^{(h)} = \prod_{m=1}^r \frac{1}{\nu_m^{(h)}}, \text{ where } \nu_1^{h} \thicksim \Gamma(a_1, 1),\: \nu_{\ge 2}^{(h)} \thicksim \Gamma(a_2, 1)
 $$
 
-## Bias towards sparsity ("nonparametrics")
+### Mixture weights
 
-- Traditionally the phrase "Bayesian nonparametrics" refers to models where the number of mixture components (or some other parameter) is unbounded and adapts to the data
-- Here, there is a fixed upper bound, but set unnecessarily high, with the priors ensuring that most components won't be used
-- David Blei, the king of nonparametrics, seems okay with this
+The mixture weights are simply distributed as
+$$
+(\nu_1, \nu_2, \dots, \nu_h) \sim \text{Dirichlet}\left(\frac{1}{H}, \frac{1}{H}, \dots, \frac{1}{H}\right)
+$$
 
-## Prior distribution parameters
+(A Dirichlet distribution essentially returns a normalized vector, whose values function as probabilities for a categorical distribution.)
 
-- Edge biases are Gaussian: $Z \thicksim \mathbf{N}_{V(V-1)/2}(\mu, \Sigma)$
-- So are latent parameters: $X_{vr}^{h} \thicksim \mathbf{N}(0, 1)$
+There are theoretical results for simple mixtures of Gaussians suggesting that the Dirichlet prior is enough to encourage sparsity, reducing the numbers of mixture components. Durante et al only have empirical justifications here, but in practice this does seem to work (see below).
 
 ## Gibbs sampler
 
